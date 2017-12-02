@@ -98,17 +98,29 @@ def enhancedFeatureExtractor(datum):
     ##
     """
     features = basicFeatureExtractor(datum)
-# num_empty_regions = num_empty(datum)
-#    num_full_regions = num_full(datum)
     symmetry = get_symmetry(datum).flatten()
     datum_2d = gaussian_filter(datum.reshape([28, 28]), 0.8)
     vert_convolve = signal.convolve2d(datum_2d, [[1,-1]]).flatten()
     hor_convolve = signal.convolve2d(datum_2d, [[1],[-1]]).flatten()
     log_convolve = gaussian_laplace(datum.reshape([28, 28]), 1.8).flatten()
 
-
-    features = np.concatenate([vert_convolve, hor_convolve, log_convolve])
+    pixel_feats = [features, symmetry, vert_convolve, hor_convolve, log_convolve]
+    features = np.concatenate(pixel_feats)
     "*** YOUR CODE HERE ***"
+    num_empty_regions = num_empty(datum)
+    num_empty_regions_arr = np.zeros((3,))
+    if num_empty_regions < 3:
+        num_empty_regions_arr[num_empty_regions] = 1
+
+    num_full_regions = num_full(datum)
+    num_full_regions_arr = np.zeros((3,))
+    if num_full_regions < 3:
+        num_full_regions_arr[num_full_regions] = 1
+
+    features = np.append(features, np.array([num_empty_regions]))
+    features = np.append(features, np.array([num_full_regions]))
+    features = np.append(features, num_empty_regions_arr)
+    features = np.append(features, num_full_regions_arr)
 
     return features
 
