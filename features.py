@@ -12,13 +12,17 @@
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
+from __future__ import division
 import numpy as np
+import math
 import util
 import samples
 from scipy import signal
 import scipy.ndimage
+from  scipy.ndimage.morphology import distance_transform_cdt
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.filters import gaussian_laplace
+from scipy.ndimage.filters import maximum_filter
 
 DIGIT_DATUM_WIDTH=28
 DIGIT_DATUM_HEIGHT=28
@@ -80,7 +84,26 @@ def num_full(datum):
 
 def get_symmetry(datum):
     return datum - np.fliplr(datum)
-    
+
+def chamferDist(datum):
+    return distance_transform_cdt(datum) / datum.shape[0]
+
+def max_pooling(thing, pool_size):
+    side_length = thing.shape[0]
+    num_pools = int(side_length/pool_size)
+    pools = np.zeros((num_pools, num_pools), dtype=np.float)
+    for i in range(0, num_pools):
+        for j in range(0, num_pools):
+            windowStart = (i * pool_size, j * pool_size)
+            max = -999999999
+            for x in range(i, i + pool_size):
+                for y in range(j, j + pool_size):
+                    if thing[x][y] > max:
+                        max = thing[x][y]
+            pools[i][j] = max
+    return pools
+
+
 
 def enhancedFeatureExtractor(datum):
     """
@@ -99,14 +122,24 @@ def enhancedFeatureExtractor(datum):
     """
     features = basicFeatureExtractor(datum)
     symmetry = get_symmetry(datum).flatten()
-    datum_2d = gaussian_filter(datum.reshape([28, 28]), 0.8)
-    vert_convolve = signal.convolve2d(datum_2d, [[1,-1]]).flatten()
-    hor_convolve = signal.convolve2d(datum_2d, [[1],[-1]]).flatten()
-    log_convolve = gaussian_laplace(datum.reshape([28, 28]), 1.8).flatten()
 
-    pixel_feats = [features, symmetry, vert_convolve, hor_convolve, log_convolve]
+    datum_2d = gaussian_filter(datum.reshape([28, 28]), 0.8)
+    vert_convolve = signal.convolve2d(datum_2d, [[1,-1]])
+    neighborhood = scipy.ndimage.morphology.generate_binary_structure(2,2)
+    maximum_filter(vert_convolve, footprint=np.ones((3,3)))
+
+#    vert_convolve = np.asarray(vert_convolve)[vert_convolve == maximum_filter(vert_convolve, footprint=np.ones((3,3)))]
+    vert_convolve = max_pooling(vert_convolve, 2).flatten()
+
+    hor_convolve = signal.convolve2d(datum_2d, [[1],[-1]])
+#    hor_convolve = hor_convolve[hor_convolve == maximum_filter(hor_convolve, footprint=np.ones((3,3)))]
+    hor_convolve = max_pooling(hor_convolve, 2).flatten()
+
+    log_convolve = gaussian_laplace(datum.reshape([28, 28]), 1.8).flatten()
+    chamfer = chamferDist(datum).flatten()
+
+    pixel_feats = [features, symmetry, vert_convolve, hor_convolve, log_convolve, chamfer]
     features = np.concatenate(pixel_feats)
-    "*** YOUR CODE HERE ***"
     num_empty_regions = num_empty(datum)
     num_empty_regions_arr = np.zeros((3,))
     if num_empty_regions < 3:
